@@ -10,3 +10,5 @@ testing*
 node_modules/
 package-lock.json
 package.json
+
+emma_meerpipe_outputs/
