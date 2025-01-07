@@ -1,6 +1,6 @@
 process GENERATE_RESIDUALS {
     tag "$meta.id"
-    label 'process_single'
+    label 'database_upload'
     label 'psrdb_tempo2'
 
     // TODO nf-core: List required Conda package(s).

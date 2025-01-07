@@ -1,5 +1,5 @@
 process OBS_LIST {
-    label 'process_single'
+    label 'database_upload'
     label 'psrdb'
 
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
