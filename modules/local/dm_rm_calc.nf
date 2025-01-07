@@ -15,7 +15,7 @@ process DM_RM_CALC {
     tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
 
     output:
-    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path("${meta.pulsar}_${meta.utc}_dm_rm_fit.json"), path("{cleaned,no}_rmfit.png")
+    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path("${meta.pulsar}_${meta.utc}_dm_rm_fit.json"), path("{cleaned,no}_rmfit.png"), path("{cleaned,no}_dmfit.png")
 
     when:
     task.ext.when == null || task.ext.when
@@ -41,6 +41,7 @@ process DM_RM_CALC {
         }
         EOF
         touch no_rmfit.png
+        touch no_dmfit.png
         """
     else if ( Float.valueOf(meta.snr) > 20.0 )
         """
@@ -71,9 +72,15 @@ process DM_RM_CALC {
         echo "MODE 1" >>  ${ephemeris}.dm
         # Remove zero S/N TOAs
         sed -i '/-snr 0 /d' dm.tim
+        # HERE COULD REMOVE LOW S/N TOAs FROM DM.TIM (one way is: echo "LOGIC -snr < 8.0 REJECT" > dmfit.select and then adding  -select dmfit.select to the tempo2 command below)
         # Fit for DM
-        tempo2 -nofit -fit DM -set START 40000 -set FINISH 99999 -f ${ephemeris}.dm -outpar ${ephemeris}.dmfit dm.tim
+        tempo2 -nofit -fit DM -set START 40000 -set FINISH 99999 -f ${ephemeris}.dm -outpar ${ephemeris}.dmfit dm.tim 
+        #Then create a plot using the above fit (cannot run both in one command, doesn't save the par if you plot in the above)
+        tempo2 -gr plk  -nofit -set START 40000 -set FINISH 99999 -f ${ephemeris}.dmfit  dm.tim -yplot 2 -xplot 7 -grdev cleaned_dmfit.png/png -publish -us 
+        #Extra options that Matthew and Saurav added in the above commands: -set NE_SW 0.0. 
 
+        #Matthew and Saurav doubled all the RM ranges? Is that necessary? And they set the steps to 100.
+        #Choose the RM range based on the band
         input_rm=\$(vap -c rm ${meta.pulsar}_${meta.utc}_zap.rmcalc | tail -n 1| tr -s ' ' | cut -d ' ' -f 2)
         if [ "${meta.band}" == "UHF" ]; then
             rm_range=7
@@ -140,6 +147,7 @@ process DM_RM_CALC {
         """
     else
         """
+        # If the S/N is less than 20, use pdmp to do the DM calculation, but do not produce a plot
         pam -T -S -p -e dmcalc ${cleaned_archive}
         pdmp -g ${cleaned_archive}.ps/cps -mc 16 *dmcalc
 
@@ -160,6 +168,7 @@ process DM_RM_CALC {
         }
         EOF
         touch no_rmfit.png
+        touch no_dmfit.png
         """
 
     stub:
@@ -178,5 +187,6 @@ process DM_RM_CALC {
     }
     EOF
     touch no_rmfit.png
+    touch no_dmfit.png
     """
 }

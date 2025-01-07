@@ -53,6 +53,7 @@ The images names and descriptions are listed below in the same order they appear
 - `{cleaned/raw}_SNR_cumulative.png`: The cumulative signal-to-noise ratio plot which shows how the SNR increases with time.
 - `{cleaned/raw}_SNR_single.png`: The single subint signal-to-noise ratio plot which shows the SNR at each subint.
 - `cleaned_rmfit.png`: The result of the `rmfit` command for checking the quality of the RM measurement.
+- `cleaned_dmfit.png`: The TEMPO2 DM-fitting output plot.
 
 ### Decimated
 

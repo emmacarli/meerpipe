@@ -17,7 +17,7 @@ process GENERATE_IMAGE_RESULTS {
         'nickswainston/meerpipe:3.0.6' }"
 
     input:
-    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(dm_results), path(rm_fit_image)
+    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(dm_results), path(rm_fit_image), path(dm_fit_image)
 
     output:
     tuple val(meta), path("*.png", includeInputs: true), path("*.dat"), path("*dynspec"), path("results.json")
