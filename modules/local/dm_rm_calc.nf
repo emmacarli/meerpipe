@@ -15,7 +15,7 @@ process DM_RM_CALC {
     tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive)
 
     output:
-    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path("${meta.pulsar}_${meta.utc}_dm_rm_fit.json"), path("{cleaned,no}_rmfit.png")
+    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path("${meta.pulsar}_${meta.utc}_dm_rm_fit.json"), path("{cleaned,no}_rmfit.png"), path("{cleaned,no}_dmfit.png")
 
     when:
     task.ext.when == null || task.ext.when
@@ -41,6 +41,7 @@ process DM_RM_CALC {
         }
         EOF
         touch no_rmfit.png
+        touch no_dmfit.png
         """
     else if ( Float.valueOf(meta.snr) > 20.0 )
         """
@@ -73,7 +74,8 @@ process DM_RM_CALC {
         sed -i '/-snr 0 /d' dm.tim
         # Fit for DM
         tempo2 -nofit -fit DM -set START 40000 -set FINISH 99999 -f ${ephemeris}.dm -outpar ${ephemeris}.dmfit dm.tim
-
+        # Plot DM fit residuals as a function of frequency
+        tempo2 -gr plk  -nofit -set START 40000 -set FINISH 99999 -f ${ephemeris}.dmfit  dm.tim -yplot 2 -xplot 7 -grdev cleaned_dmfit.png/png -publish -us       
         input_rm=\$(vap -c rm ${meta.pulsar}_${meta.utc}_zap.rmcalc | tail -n 1| tr -s ' ' | cut -d ' ' -f 2)
         if [ "${meta.band}" == "UHF" ]; then
             rm_range=7
@@ -160,6 +162,7 @@ process DM_RM_CALC {
         }
         EOF
         touch no_rmfit.png
+        touch no_dmfit.png
         """
 
     stub:
@@ -178,5 +181,6 @@ process DM_RM_CALC {
     }
     EOF
     touch no_rmfit.png
+    touch no_dmfit.png
     """
 }
