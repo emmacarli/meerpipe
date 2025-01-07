@@ -1,7 +1,7 @@
 process UPLOAD_DM_RM_RESULTS {
     tag "$meta.id"
     label 'psrdb'
-    label 'process_single'
+    label 'database_upload'
 
     // TODO nf-core: List required Conda package(s).
     //               Software MUST be pinned to channel (i.e. "bioconda"), version (i.e. "1.10").
