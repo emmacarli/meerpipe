@@ -17,7 +17,7 @@ process GENERATE_IMAGE_RESULTS {
         'nickswainston/meerpipe:3.0.6' }"
 
     input:
-    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(dm_results), path(rm_fit_image)
+    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive), path(dm_results), path(rm_fit_image), path(dm_fit_image)
 
     output:
     tuple val(meta), path("*.png", includeInputs: true), path("*.dat"), path("*dynspec"), path("results.json")
@@ -42,7 +42,7 @@ process GENERATE_IMAGE_RESULTS {
         psrplot -p Scyl -jFTD  -jC                          -g 1024x768 -c above:l= -c above:c="Polarisation Profile (\${type})" -D \${type}_profile_ftp.png/png \$file
         psrplot -p freq -jTDp  -jC                          -g 1024x768 -c above:l= -c above:c="Phase vs. Frequency (\${type})"  -D \${type}_phase_freq.png/png  \$file
         psrplot -p time -jFDp  -jC                          -g 1024x768 -c above:l= -c above:c="Phase vs. Time (\${type})"       -D \${type}_phase_time.png/png  \$file
-        psrplot -p b -x -jT -lpol=0,1 -O -c log=1 -c skip=1 -g 1024x768 -c above:l= -c above:c="Cleaned bandpass (\${type})"     -D \${type}_bandpass.png/png    \$file
+        psrplot -p b -x -jT -lpol=0,1 -O -c log=1 -c skip=1 -g 1024x768 -c above:l= -c above:c="Bandpass (\${type})"     -D \${type}_bandpass.png/png    \$file
     done
 
     # Create flux and polarisation scrunched archive for SNR images
