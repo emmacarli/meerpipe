@@ -293,6 +293,24 @@ process OBS_LIST {
             obs_df.at[index, 'percent_rfi_zapped'] = pfr_data[0]['pipelineRun']['percentRfiZapped']
             obs_df.at[index, 'clean_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar"
 
+    if "${params.refold_prev_ar}" == "true":
+        obs_df['percent_rfi_zapped'] = 0.
+        with open('empty_raw.ar', 'w'):
+            pass # Make an empty file
+        obs_df['raw_archive'] = os.path.join(os.getcwd(), 'empty_raw.ar')
+        obs_df['clean_archive'] = ''
+        for index, obs in obs_df.iterrows():
+            pfr_data = pfr_client.list(
+                pulsar=obs["Pulsar Jname"],
+                mainProject="MeerTIME",
+                utcStart=obs["UTC Start"],
+                beam=obs["Beam #"],
+            )
+            print(pfr_data)
+            obs_df.at[index, 'percent_rfi_zapped'] = pfr_data[0]['pipelineRun']['percentRfiZapped']
+            obs_df.at[index, 'clean_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar"
+
+
     # Write out results
     obs_df.drop('Obs ID', axis=1, inplace=True)
     obs_df.to_csv("processing_jobs.csv", header=False, index=False)

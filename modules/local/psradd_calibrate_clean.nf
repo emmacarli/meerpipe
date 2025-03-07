@@ -15,13 +15,33 @@ process PSRADD_CALIBRATE_CLEAN {
         'nickswainston/meerpipe:3.0.6' }"
 
     input:
-    tuple val(meta), path(cal_loc), path(ephemeris), path(template)
+    tuple val(meta), path(cal_loc, optional: true), path(ephemeris), path(template), path(raw_archive, optional: true), path(cleaned_archive, optional: true)
 
     output:
-    tuple val(meta), path(ephemeris), path(template), path("${meta.pulsar}_${meta.utc}_raw.ar"), path("${meta.pulsar}_${meta.utc}_zap.ar"), env(SNR), env(FLUX)
+    tuple val(meta), path(ephemeris), path(template), path(env(RAW_ARCHIVE)), path(env(CLEANED_ARCHIVE)), env(SNR), env(FLUX)
 
     when:
     task.ext.when == null || task.ext.when
+
+    if (cal_loc == null && params.refold_prev_ar == False) {
+        error "If cal_loc is not passed as an input, refold_prev_ar must be true"
+    }
+
+    if (cal_loc != null && params.refold_prev_ar == True) {
+        error "If cal_loc is passed as an input, refold_prev_ar must be false"
+    }
+
+    if (cleaned_archive == null && params.refold_prev_ar == True) {
+       no_cleaned_archive_to_refold = True
+    }
+
+    if (cleaned_archive != null && params.refold_prev_ar == False) {
+        error "If cleaned_archive is passed as an input, refold_prev_ar must be true"
+    }
+
+    if (raw_archive != null && params.refold_prev_ar == True) {
+        error "A raw archive has to exist use the refold_prev_ar option, to pass on the raw archive to the rest of the pipeline"
+    }
 
     script:
     def args = task.ext.args ?: ''
@@ -30,129 +50,154 @@ process PSRADD_CALIBRATE_CLEAN {
     //               If the software is unable to output a version number on the command-line then it can be manually specified
     //               e.g. https://github.com/nf-core/modules/blob/master/modules/nf-core/homer/annotatepeaks/main.nf
     """
+    
     raw_only=${ template.baseName == "no_template" ? "true" : "false" }
 
-    # Grab obs.header to output it the publishDir
-    mkdir -p ${params.outdir}/${meta.pulsar}/${meta.utc}/${meta.beam}
-    cp ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/obs.header ${params.outdir}/${meta.pulsar}/${meta.utc}/${meta.beam}
+    if "${params.refold_prev_ar}" == "false"; then
 
-    if ${params.use_edge_subints}; then
-        # Grab all archives
-        archives=\$(ls ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/*.ar)
-    else
-        if [ -z \$(ls ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/*.ar | head -n-1 | tail -n+2) ]; then
-            # Grab all archives anyway because there are only two
+
+        # Grab obs.header to output it the publishDir
+        mkdir -p ${params.outdir}/${meta.pulsar}/${meta.utc}/${meta.beam}
+        cp ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/obs.header ${params.outdir}/${meta.pulsar}/${meta.utc}/${meta.beam}
+
+        if ${params.use_edge_subints}; then
+            # Grab all archives
             archives=\$(ls ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/*.ar)
         else
-            # Grab all archives except for the first and last one
-            archives=\$(ls ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/*.ar | head -n-1 | tail -n+2)
+            if [ -z \$(ls ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/*.ar | head -n-1 | tail -n+2) ]; then
+                # Grab all archives anyway because there are only two
+                archives=\$(ls ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/*.ar)
+            else
+                # Grab all archives except for the first and last one
+                archives=\$(ls ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/*.ar | head -n-1 | tail -n+2)
+            fi
         fi
-    fi
 
-    if [ "\$raw_only" == "false" ]; then
-        echo "Check if you need to change the template bins"
-        obs_nbin=\$(vap -c nbin \$(echo "\$archives" | awk '{print \$1}') | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
-        std_nbin=\$(vap -c nbin ${template} | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
-        if [ "\$obs_nbin" == "\$std_nbin" ]; then
-            std_template=${template}
+        if [ "\$raw_only" == "false" ]; then
+            echo "Check if you need to change the template bins"
+            obs_nbin=\$(vap -c nbin \$(echo "\$archives" | awk '{print \$1}') | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+            std_nbin=\$(vap -c nbin ${template} | tail -n 1 | tr -s ' ' | cut -d ' ' -f 2)
+            if [ "\$obs_nbin" == "\$std_nbin" ]; then
+                std_template=${template}
+            else
+                echo "Making a new template with right number of bins"
+                pam -b \$((std_nbin / obs_nbin)) -e new_std ${template}
+                std_template=*new_std
+            fi
+        fi
+
+        echo "Combine the archives"
+        psradd \\
+            -E ${ephemeris} \\
+            -o ${meta.pulsar}_${meta.utc}_raw.ar \\
+            \${archives}
+        if [ "\$raw_only" == "false" ]; then
+            echo "Clean the archive"
+            clean_archive.py \\
+                -a ${meta.pulsar}_${meta.utc}_raw.ar \\
+                -T \${std_template} \\
+                -o ${meta.pulsar}_${meta.utc}_zap.ar
+        fi
+
+
+        echo "Calibrate the polarisation of the archive"
+        if [[ "${cal_loc}" == "" || "${cal_loc}" == "no_cal_file" ]]; then
+            # The archives have already be calibrated so just update the headers
+            pac_args="-XP -e scalP"
         else
-            echo "Making a new template with right number of bins"
-            pam -b \$((std_nbin / obs_nbin)) -e new_std ${template}
-            std_template=*new_std
+            # Use the Stokes paramaters files to calibrate the archive
+            cal_loc="${cal_loc}"
+            pac_args="-Q \${cal_loc//\\\\/} -e scal"
         fi
-    fi
+        pac \${pac_args} -O ./ ${meta.pulsar}_${meta.utc}_raw.ar
+        RAW_ARCHIVE=${meta.pulsar}_${meta.utc}_raw.ar
+        if [ "\$raw_only" == "false" ]; then
+            pac \${pac_args} -O ./ ${meta.pulsar}_${meta.utc}_zap.ar
+        fi
 
-    echo "Combine the archives"
-    psradd \\
-        -E ${ephemeris} \\
-        -o ${meta.pulsar}_${meta.utc}_raw.ar \\
-        \${archives}
-    if [ "\$raw_only" == "false" ]; then
-        echo "Clean the archive"
-        clean_archive.py \\
-            -a ${meta.pulsar}_${meta.utc}_raw.ar \\
-            -T \${std_template} \\
-            -o ${meta.pulsar}_${meta.utc}_zap.ar
-    fi
+        echo "Update the DM header value from ephemeris"
+        pam --update_dm -E ${ephemeris} -m ${meta.pulsar}_${meta.utc}_raw.scalP
+        if [ "\$raw_only" == "false" ]; then
+            pam --update_dm -E ${ephemeris} -m ${meta.pulsar}_${meta.utc}_zap.scalP
+        fi
 
-
-    echo "Calibrate the polarisation of the archive"
-    if [[ "${cal_loc}" == "" || "${cal_loc}" == "no_cal_file" ]]; then
-        # The archives have already be calibrated so just update the headers
-        pac_args="-XP -e scalP"
-    else
-        # Use the Stokes paramaters files to calibrate the archive
-        cal_loc="${cal_loc}"
-        pac_args="-Q \${cal_loc//\\\\/} -e scal"
-    fi
-    pac \${pac_args} -O ./ ${meta.pulsar}_${meta.utc}_raw.ar
-    if [ "\$raw_only" == "false" ]; then
-        pac \${pac_args} -O ./ ${meta.pulsar}_${meta.utc}_zap.ar
-    fi
-
-    echo "Update the DM header value from ephemeris"
-    pam --update_dm -E ${ephemeris} -m ${meta.pulsar}_${meta.utc}_raw.scalP
-    if [ "\$raw_only" == "false" ]; then
-        pam --update_dm -E ${ephemeris} -m ${meta.pulsar}_${meta.utc}_zap.scalP
-    fi
-
-    echo "Update the RM value if available"
-    rm_cat=\$(python -c "from meerpipe.data_load import RM_CAT;print(RM_CAT)")
-    if grep -q "${meta.pulsar}" \${rm_cat}; then
-        rm=\$(grep ${meta.pulsar} \${rm_cat} | tr -s ' ' | cut -d ' ' -f 2)
-        echo "Found RM of \${rm} in the private RM catalogue"
-    else
-        rm=\$(psrcat -c RM ${meta.pulsar} -X | tr -s ' ' | cut -d ' ' -f 1)
-        if [[ "\${rm}" == "*" || "\${rm}" == "WARNING:" ]]; then
-            echo "No RM found in the ATNF catalogue"
-            rm=0
+        echo "Update the RM value if available"
+        rm_cat=\$(python -c "from meerpipe.data_load import RM_CAT;print(RM_CAT)")
+        if grep -q "${meta.pulsar}" \${rm_cat}; then
+            rm=\$(grep ${meta.pulsar} \${rm_cat} | tr -s ' ' | cut -d ' ' -f 2)
+            echo "Found RM of \${rm} in the private RM catalogue"
         else
-            echo "Found RM of \${rm} in the ATNF catalogue"
+            rm=\$(psrcat -c RM ${meta.pulsar} -X | tr -s ' ' | cut -d ' ' -f 1)
+            if [[ "\${rm}" == "*" || "\${rm}" == "WARNING:" ]]; then
+                echo "No RM found in the ATNF catalogue"
+                rm=0
+            else
+                echo "Found RM of \${rm} in the ATNF catalogue"
+            fi
         fi
-    fi
-    pam --RM \${rm} -m ${meta.pulsar}_${meta.utc}_raw.scalP
-    if [ "\$raw_only" == "false" ]; then
-        pam --RM \${rm} -m ${meta.pulsar}_${meta.utc}_zap.scalP
-    fi
+        pam --RM \${rm} -m ${meta.pulsar}_${meta.utc}_raw.scalP
+        if [ "\$raw_only" == "false" ]; then
+            pam --RM \${rm} -m ${meta.pulsar}_${meta.utc}_zap.scalP
+        fi
 
-    if \$raw_only; then
-        echo "Delay correct"
-        dlyfix -e ar ${meta.pulsar}_${meta.utc}_raw.scalP
+        if \$raw_only; then
+            echo "Delay correct"
+            dlyfix -e ar ${meta.pulsar}_${meta.utc}_raw.scalP
 
-        echo "Flux calibrate"
-        # Create a time and polarisation scruchned profile
-        pam -Tp -e tp ${meta.pulsar}_${meta.utc}_raw.ar
-        fluxcal_meerkat \\
-            --psr_name ${meta.pulsar} \\
-            --obs_name ${meta.utc} \\
-            --obs_header ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/obs.header \\
-            --archive_file ${meta.pulsar}_${meta.utc}_raw.ar \\
-            --tp_file *tp \\
-            --par_file ${ephemeris}
+            echo "Flux calibrate"
+            # Create a time and polarisation scruchned profile
+            pam -Tp -e tp ${meta.pulsar}_${meta.utc}_raw.ar
+            fluxcal_meerkat \\
+                --psr_name ${meta.pulsar} \\
+                --obs_name ${meta.utc} \\
+                --obs_header ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/obs.header \\
+                --archive_file ${meta.pulsar}_${meta.utc}_raw.ar \\
+                --tp_file *tp \\
+                --par_file ${ephemeris}
 
-        echo "No template provided so there will be no cleaned archive"
-        touch ${meta.pulsar}_${meta.utc}_zap.ar
-        SNR=None
-        FLUX=None
+            echo "No template provided so there will be no cleaned archive"
+            touch ${meta.pulsar}_${meta.utc}_zap.ar
+            SNR=None
+            FLUX=None
+        else
+            echo "Delay correct"
+            dlyfix -e ar ${meta.pulsar}_${meta.utc}_zap.scalP
+
+            echo "Flux calibrate"
+            # Create a time and polarisation scruchned profile
+            pam -Tp -e tp ${meta.pulsar}_${meta.utc}_zap.ar
+            fluxcal_meerkat \\
+                --psr_name ${meta.pulsar} \\
+                --obs_name ${meta.utc} \\
+                --obs_header ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/obs.header \\
+                --archive_file ${meta.pulsar}_${meta.utc}_zap.ar \\
+                --tp_file *tp \\
+                --par_file ${ephemeris}
+
+            CLEANED_ARCHIVE=${meta.pulsar}_${meta.utc}_zap.ar
+            echo "Get the signal-to-noise ratio and flux density of the cleaned archive"
+            pam -FTp -e FTp ${meta.pulsar}_${meta.utc}_zap.ar
+            SNR=\$(psrstat -c snr=pdmp -c snr ${meta.pulsar}_${meta.utc}_zap.FTp | cut -d '=' -f 2)
+            FLUX=\$(pdv -f ${meta.pulsar}_${meta.utc}_zap.FTp | tail -n 1 | tr -s ' ' | cut -d ' ' -f 7)
+        fi
     else
-        echo "Delay correct"
-        dlyfix -e ar ${meta.pulsar}_${meta.utc}_zap.scalP
+        RAW_ARCHIVE=${raw_archive}
+        if  "${no_cleaned_archive_to_refold}" == "true"; then
+            echo "There is no cleaned archive to refold according to NextFlow input"
+            #don't know if this works, if so could fail below?
+        fi
+        if [ ! -f ${meta.pulsar}_${meta.utc}_zap.ar ]; then #This happens if refold_prev_ar is false (as default) and raw_only is true, according to https://github.com/nf-core/meerpipe/blob/d9b5849c8b6e2d3451211f5915deae62340af33b/docs/output.md?plain=1#L29
+           echo "There is no cleaned archive (according to current MeerPipe naming convention) to refold in the directory"
+        else
+            echo "The raw archive will not be refolded as it is not stored"
+            echo "Refold the previously cleaned and flux calibrated archive"
+            pam -m -E ${ephemeris} ${cleaned_archive}
+            CLEANED_ARCHIVE=${cleaned_archive}
+            pam -FTp -e FTp ${cleaned_archive}
+            SNR=\$(psrstat -c snr=pdmp -c snr ${cleaned_archive}.FTp | cut -d '=' -f 2)
+            FLUX=\$(pdv -f ${cleaned_archive}.FTp | tail -n 1 | tr -s ' ' | cut -d ' ' -f 7)
 
-        echo "Flux calibrate"
-        # Create a time and polarisation scruchned profile
-        pam -Tp -e tp ${meta.pulsar}_${meta.utc}_zap.ar
-        fluxcal_meerkat \\
-            --psr_name ${meta.pulsar} \\
-            --obs_name ${meta.utc} \\
-            --obs_header ${params.input_dir}/${meta.pulsar}/${meta.utc}/${meta.beam}/*/obs.header \\
-            --archive_file ${meta.pulsar}_${meta.utc}_zap.ar \\
-            --tp_file *tp \\
-            --par_file ${ephemeris}
-
-        echo "Get the signal-to-noise ratio and flux density of the cleaned archive"
-        pam -FTp -e FTp ${meta.pulsar}_${meta.utc}_zap.ar
-        SNR=\$(psrstat -c snr=pdmp -c snr ${meta.pulsar}_${meta.utc}_zap.FTp | cut -d '=' -f 2)
-        FLUX=\$(pdv -f ${meta.pulsar}_${meta.utc}_zap.FTp | tail -n 1 | tr -s ' ' | cut -d ' ' -f 7)
+        fi
     fi
     """
 
