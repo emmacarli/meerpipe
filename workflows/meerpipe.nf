@@ -46,9 +46,9 @@ workflow MEERPIPE {
         error "If you provide an ephemeris, you must also provide a project with --project"
     }
     if ( params.template != "" && params.project == "" ) {
-        error "If you provide an template, you must also provide a project with --project"
+        error "If you provide a template, you must also provide a project with --project"
     }
-    if ( params.use_prev_ar == True and params.refold_prev_ar == True ) {
+    if ( params.use_prev_ar == true && params.refold_prev_ar == true ) {
         error "You cannot use both --use_prev_ar and --refold_prev_ar"
     }
 
@@ -121,6 +121,7 @@ workflow MEERPIPE {
                     n_obs: n_obs,
                     percent_rfi_zapped: percent_rfi_zapped,
                 ],
+                cal_loc, 
                 ephemeris,
                 template,
                 raw_archive,
@@ -131,7 +132,7 @@ workflow MEERPIPE {
         // Convert csv into a tuple of the meta map and the files
         obs_data = OBS_LIST.out.splitCsv()
         .map {
-            pulsar, utc, project_short, beam, band, dur, mode_dur, obs_nchan, obs_nbin, cal_loc, pipe_id, ephemeris, template, n_obs ->
+            pulsar, utc, project_short, beam, band, dur, mode_dur, obs_nchan, obs_nbin, cal_loc, pipe_id, ephemeris, template, n_obs, raw_archive, cleaned_archive ->
             [
                 [
                     id: "${pulsar}_${utc}_${beam}",
@@ -152,13 +153,15 @@ workflow MEERPIPE {
                 cal_loc,
                 ephemeris,
                 template,
+                raw_archive,
+                cleaned_archive
             ]
         }
 
         // Combine archives,flux calibrate Clean of RFI with MeerGaurd
         // obs_data is not defined if use_prev_ar is true so this will not run if use_prev_ar is true
         PSRADD_CALIBRATE_CLEAN( obs_data )
-        files_and_meta = PSRADD_CALIBRATE_CLEAN.out         // files_and_meta are defined earlier when use_prev_ar is true and this will not apply
+        files_and_meta = PSRADD_CALIBRATE_CLEAN.out         // files_and_meta are defined earlier when use_prev_ar is true, and this will not apply because there is no PSRADD_CALIBRATE_CLEAN run in that case
             .map {
                 meta, ephemeris, template, raw_archive, cleaned_archive, snr, flux ->
                 [
@@ -189,10 +192,11 @@ workflow MEERPIPE {
             }
 
         // Calculate the DM with tempo2 or pdmp
-        // This is run on the cleaned archive and does not require a raw archive. It will also run if use_prev_ar or refold_prev_ar are true.
+        // This is run on the cleaned archive and does not require a raw archive though it is passed through for the next step. It will also run if use_prev_ar or refold_prev_ar are true.
         DM_RM_CALC( files_and_meta )
 
         // Other images using matplotlib and psrplot and make a results.json
+        // Emma doesn't understand how this handles empty raw archives in the case of use_prev_ar
         GENERATE_IMAGE_RESULTS( DM_RM_CALC.out )
         // Upload images and results
         if ( params.upload ) {

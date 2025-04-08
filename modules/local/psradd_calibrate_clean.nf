@@ -15,7 +15,7 @@ process PSRADD_CALIBRATE_CLEAN {
         'nickswainston/meerpipe:3.0.6' }"
 
     input:
-    tuple val(meta), path(cal_loc, optional: true), path(ephemeris), path(template), path(raw_archive, optional: true), path(cleaned_archive, optional: true)
+    tuple val(meta), path(cal_loc), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive) 
 
     output:
     tuple val(meta), path(ephemeris), path(template), path(env(RAW_ARCHIVE)), path(env(CLEANED_ARCHIVE)), env(SNR), env(FLUX)
@@ -23,25 +23,6 @@ process PSRADD_CALIBRATE_CLEAN {
     when:
     task.ext.when == null || task.ext.when
 
-    if (cal_loc == null && params.refold_prev_ar == False) {
-        error "If cal_loc is not passed as an input, refold_prev_ar must be true"
-    }
-
-    if (cal_loc != null && params.refold_prev_ar == True) {
-        error "If cal_loc is passed as an input, refold_prev_ar must be false"
-    }
-
-    if (cleaned_archive == null && params.refold_prev_ar == True) {
-       no_cleaned_archive_to_refold = True
-    }
-
-    if (cleaned_archive != null && params.refold_prev_ar == False) {
-        error "If cleaned_archive is passed as an input, refold_prev_ar must be true"
-    }
-
-    if (raw_archive != null && params.refold_prev_ar == True) {
-        error "A raw archive has to exist use the refold_prev_ar option, to pass on the raw archive to the rest of the pipeline"
-    }
 
     script:
     def args = task.ext.args ?: ''
@@ -53,7 +34,7 @@ process PSRADD_CALIBRATE_CLEAN {
     
     raw_only=${ template.baseName == "no_template" ? "true" : "false" }
 
-    if "${params.refold_prev_ar}" == "false"; then
+    if ["${params.refold_prev_ar}" == "false"]; then
 
 
         # Grab obs.header to output it the publishDir
@@ -182,10 +163,6 @@ process PSRADD_CALIBRATE_CLEAN {
         fi
     else
         RAW_ARCHIVE=${raw_archive}
-        if  "${no_cleaned_archive_to_refold}" == "true"; then
-            echo "There is no cleaned archive to refold according to NextFlow input"
-            #don't know if this works, if so could fail below?
-        fi
         if [ ! -f ${meta.pulsar}_${meta.utc}_zap.ar ]; then #This happens if refold_prev_ar is false (as default) and raw_only is true, according to https://github.com/nf-core/meerpipe/blob/d9b5849c8b6e2d3451211f5915deae62340af33b/docs/output.md?plain=1#L29
            echo "There is no cleaned archive (according to current MeerPipe naming convention) to refold in the directory"
         else

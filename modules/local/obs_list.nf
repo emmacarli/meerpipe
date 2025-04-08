@@ -37,6 +37,7 @@ process OBS_LIST {
     import shutil
     import logging
     import pandas as pd
+    import glob
     from datetime import datetime
 
     from psrdb.tables.observation import Observation
@@ -272,14 +273,27 @@ process OBS_LIST {
         # Count observations with the same pulsar
         obs_df.at[index, 'n_obs']     = len(obs_df[obs_df['Pulsar Jname'] == pulsar])
 
+        if glob.glob(f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_raw.ar") == []:
+            with open('empty_raw.ar', 'w'):
+                pass # Make an empty file
+            obs_df['raw_archive'] = os.path.join(os.getcwd(), 'empty_raw.ar')
+        else:
+            #This will happen if the pipeline has been run with no template before and therefore there is only a raw archive available.
+            obs_df['raw_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_raw.ar"
+        
+        if "${params.refold_prev_ar}" == "false" and "${params.use_prev_ar}" == "false":
+            with open('empty_clean.ar', 'w'):
+                pass # Make an empty file
+            obs_df['cleaned_archive'] = os.path.join(os.getcwd(), 'empty_clean.ar')
+        
+
+        
+
     if "${params.use_prev_ar}" == "true":
         obs_df['sn'] = 0.
         obs_df['flux'] = 0.
         obs_df['percent_rfi_zapped'] = 0.
-        with open('empty_raw.ar', 'w'):
-            pass # Make an empty file
-        obs_df['raw_archive'] = os.path.join(os.getcwd(), 'empty_raw.ar')
-        obs_df['clean_archive'] = ''
+        obs_df['cleaned_archive'] = ''
         for index, obs in obs_df.iterrows():
             pfr_data = pfr_client.list(
                 pulsar=obs["Pulsar Jname"],
@@ -291,14 +305,12 @@ process OBS_LIST {
             obs_df.at[index, 'sn'] = pfr_data[0]['pipelineRun']['sn']
             obs_df.at[index, 'flux'] = pfr_data[0]['pipelineRun']['flux']
             obs_df.at[index, 'percent_rfi_zapped'] = pfr_data[0]['pipelineRun']['percentRfiZapped']
-            obs_df.at[index, 'clean_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar"
+            obs_df.at[index, 'cleaned_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar"
+
 
     if "${params.refold_prev_ar}" == "true":
         obs_df['percent_rfi_zapped'] = 0.
-        with open('empty_raw.ar', 'w'):
-            pass # Make an empty file
-        obs_df['raw_archive'] = os.path.join(os.getcwd(), 'empty_raw.ar')
-        obs_df['clean_archive'] = ''
+        obs_df['cleaned_archive'] = ''
         for index, obs in obs_df.iterrows():
             pfr_data = pfr_client.list(
                 pulsar=obs["Pulsar Jname"],
@@ -307,8 +319,14 @@ process OBS_LIST {
                 beam=obs["Beam #"],
             )
             print(pfr_data)
-            obs_df.at[index, 'percent_rfi_zapped'] = pfr_data[0]['pipelineRun']['percentRfiZapped']
-            obs_df.at[index, 'clean_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar"
+            obs_df.at[index, 'percent_rfi_zapped'] = pfr_data[0]['pipelineRun']['percentRfiZapped'] 
+            obs_df.at[index, 'cleaned_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar"
+
+
+    
+
+        
+    
 
 
     # Write out results
