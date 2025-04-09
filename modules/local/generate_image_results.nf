@@ -45,7 +45,7 @@ process GENERATE_IMAGE_RESULTS {
         psrplot -p b -x -jT -lpol=0,1 -O -c log=1 -c skip=1 -g 1024x768 -c above:l= -c above:c="Cleaned bandpass (\${type})"     -D \${type}_bandpass.png/png    \$file
     done
 
-    if "${params.refold_prev_ar}"" == "false"; then
+    if [ "${params.refold_prev_ar}" == "false" ]; then
         # Create flux and polarisation scrunched archive for SNR images
         pam -Fp -e rawFp ${raw_archive}
     fi
@@ -64,7 +64,7 @@ process GENERATE_IMAGE_RESULTS {
             pam -b \$((std_nbin / obs_nbin)) -e new_std ${template}
             std_template=*new_std
         fi
-        if "${params.refold_prev_ar}" == "false"; then
+        if [ "${params.refold_prev_ar}" == "false" ]; then
             psrflux -s \${std_template} -e dynspec ${raw_archive}
         fi
         psrflux -s \${std_template} -e dynspec ${cleaned_archive}
@@ -76,7 +76,7 @@ process GENERATE_IMAGE_RESULTS {
     generate_images_results \\
         --pid ${meta.project_short} \\
         --raw_file ${raw_archive} \\
-        --raw_Fp *rawFp \\ 
+        --raw_Fp *rawFp \\
         --cleaned_file ${cleaned_archive} \\
         --clean_Fp *cleanFp \\
         --clean_FTp *cleanFTp \\

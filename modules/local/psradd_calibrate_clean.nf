@@ -18,10 +18,10 @@ process PSRADD_CALIBRATE_CLEAN {
     tuple val(meta), path(cal_loc), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive) 
 
     output:
-    tuple val(meta), path(ephemeris), path(template), path(env(RAW_ARCHIVE)), path(env(CLEANED_ARCHIVE)), env(SNR), env(FLUX)
+    tuple val(meta), path(ephemeris), path(template), path("${meta.pulsar}_${meta.utc}_raw.ar", optional: true), path("${meta.pulsar}_${meta.utc}_zap.ar"), env(SNR), env(FLUX)
 
     when:
-    task.ext.when == null || task.ext.when
+    task.ext.when == null || task.ext.when 
 
 
     script:
@@ -34,7 +34,7 @@ process PSRADD_CALIBRATE_CLEAN {
     
     raw_only=${ template.baseName == "no_template" ? "true" : "false" }
 
-    if ["${params.refold_prev_ar}" == "false"]; then
+    if [ "${params.refold_prev_ar}" == "false" ]; then
 
 
         # Grab obs.header to output it the publishDir
@@ -91,7 +91,6 @@ process PSRADD_CALIBRATE_CLEAN {
             pac_args="-Q \${cal_loc//\\\\/} -e scal"
         fi
         pac \${pac_args} -O ./ ${meta.pulsar}_${meta.utc}_raw.ar
-        RAW_ARCHIVE=${meta.pulsar}_${meta.utc}_raw.ar
         if [ "\$raw_only" == "false" ]; then
             pac \${pac_args} -O ./ ${meta.pulsar}_${meta.utc}_zap.ar
         fi
@@ -155,21 +154,18 @@ process PSRADD_CALIBRATE_CLEAN {
                 --tp_file *tp \\
                 --par_file ${ephemeris}
 
-            CLEANED_ARCHIVE=${meta.pulsar}_${meta.utc}_zap.ar
             echo "Get the signal-to-noise ratio and flux density of the cleaned archive"
             pam -FTp -e FTp ${meta.pulsar}_${meta.utc}_zap.ar
             SNR=\$(psrstat -c snr=pdmp -c snr ${meta.pulsar}_${meta.utc}_zap.FTp | cut -d '=' -f 2)
             FLUX=\$(pdv -f ${meta.pulsar}_${meta.utc}_zap.FTp | tail -n 1 | tr -s ' ' | cut -d ' ' -f 7)
         fi
     else
-        RAW_ARCHIVE=${raw_archive}
         if [ ! -f ${meta.pulsar}_${meta.utc}_zap.ar ]; then #This happens if refold_prev_ar is false (as default) and raw_only is true, according to https://github.com/nf-core/meerpipe/blob/d9b5849c8b6e2d3451211f5915deae62340af33b/docs/output.md?plain=1#L29
            echo "There is no cleaned archive (according to current MeerPipe naming convention) to refold in the directory"
         else
             echo "The raw archive will not be refolded as it is not stored"
             echo "Refold the previously cleaned and flux calibrated archive"
             pam -m -E ${ephemeris} ${cleaned_archive}
-            CLEANED_ARCHIVE=${cleaned_archive}
             pam -FTp -e FTp ${cleaned_archive}
             SNR=\$(psrstat -c snr=pdmp -c snr ${cleaned_archive}.FTp | cut -d '=' -f 2)
             FLUX=\$(pdv -f ${cleaned_archive}.FTp | tail -n 1 | tr -s ' ' | cut -d ' ' -f 7)

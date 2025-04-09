@@ -129,6 +129,7 @@ workflow MEERPIPE {
             ]
         }
     } else {
+        // This is if refold prev ar and use prev ar are both false
         // Convert csv into a tuple of the meta map and the files
         obs_data = OBS_LIST.out.splitCsv()
         .map {
@@ -153,8 +154,8 @@ workflow MEERPIPE {
                 cal_loc,
                 ephemeris,
                 template,
-                raw_archive,
-                cleaned_archive
+                raw_archive, 
+                cleaned_archive // This is here passed as empty_clean.ar 
             ]
         }
 
