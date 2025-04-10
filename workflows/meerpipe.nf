@@ -121,11 +121,11 @@ workflow MEERPIPE {
                     n_obs: n_obs,
                     percent_rfi_zapped: percent_rfi_zapped,
                 ],
-                cal_loc, 
-                ephemeris,
-                template,
-                raw_archive,
-                cleaned_archive,
+                file(cal_loc), 
+                file(ephemeris),
+                file(template),
+                file(raw_archive),
+                file(cleaned_archive),
             ]
         }
     } else {
@@ -151,11 +151,11 @@ workflow MEERPIPE {
                     npols:params.npols.split(',').collect  { it.toInteger() },
                     n_obs: n_obs,
                 ],
-                cal_loc,
-                ephemeris,
-                template,
-                raw_archive, 
-                cleaned_archive // This is here passed as empty_clean.ar 
+                file(cal_loc),
+                file(ephemeris),
+                file(template),
+                file(raw_archive), 
+                file(cleaned_archive) // This is here passed as empty_clean.ar 
             ]
         }
 
@@ -185,10 +185,10 @@ workflow MEERPIPE {
                         snr: snr,
                         flux: flux,
                     ],
-                    ephemeris,
-                    template,
-                    raw_archive,
-                    cleaned_archive,
+                    file(ephemeris),
+                    file(template),
+                    file(raw_archive),
+                    file(cleaned_archive),
                 ]
             }
 

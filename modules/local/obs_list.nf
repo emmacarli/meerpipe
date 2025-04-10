@@ -273,6 +273,7 @@ process OBS_LIST {
         # Count observations with the same pulsar
         obs_df.at[index, 'n_obs']     = len(obs_df[obs_df['Pulsar Jname'] == pulsar])
 
+        print(f"Checking for existence of file ${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}/{obs['UTC Start']}_raw.ar")
         if glob.glob(f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_raw.ar") == []:
             with open('empty_raw.ar', 'w'):
                 pass # Make an empty file
@@ -286,7 +287,10 @@ process OBS_LIST {
                 pass # Make an empty file
             obs_df['cleaned_archive'] = os.path.join(os.getcwd(), 'empty_clean.ar')
         
-
+            obs_df = obs_df[[
+            "Obs ID", "Pulsar Jname", "UTC Start", "Project Short Name", "Beam #", "Observing Band",
+            "Duration (s)", "Mode Duration (s)", "Nchan", "Nbin", "Calibration Location",
+            "pipe_id", "ephemeris", "template", "n_obs", "raw_archive", "cleaned_archive"]]
         
 
     if "${params.use_prev_ar}" == "true":
@@ -306,7 +310,12 @@ process OBS_LIST {
             obs_df.at[index, 'flux'] = pfr_data[0]['pipelineRun']['flux']
             obs_df.at[index, 'percent_rfi_zapped'] = pfr_data[0]['pipelineRun']['percentRfiZapped']
             obs_df.at[index, 'cleaned_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar"
-
+            #Explicitely set the order of the columns so that they are read correctly by meerpipe.nf
+        obs_df = obs_df[[
+        "Obs ID", "Pulsar Jname", "UTC Start", "Project Short Name", "Beam #", "Observing Band",
+        "Duration (s)", "Mode Duration (s)", "Nchan", "Nbin", "Calibration Location",
+        "pipe_id", "ephemeris", "template", "n_obs", "sn", "flux", "percent_rfi_zapped",
+        "raw_archive", "cleaned_archive"]]
 
     if "${params.refold_prev_ar}" == "true":
         obs_df['percent_rfi_zapped'] = 0.
@@ -322,7 +331,11 @@ process OBS_LIST {
             obs_df.at[index, 'percent_rfi_zapped'] = pfr_data[0]['pipelineRun']['percentRfiZapped'] 
             obs_df.at[index, 'cleaned_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar"
 
-
+        obs_df = obs_df[[
+        "Obs ID", "Pulsar Jname", "UTC Start", "Project Short Name", "Beam #", "Observing Band",
+        "Duration (s)", "Mode Duration (s)", "Nchan", "Nbin", "Calibration Location",
+        "pipe_id", "ephemeris", "template", "n_obs", "percent_rfi_zapped",
+        "raw_archive", "cleaned_archive"]]
     
 
         
