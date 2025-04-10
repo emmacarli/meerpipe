@@ -158,11 +158,13 @@ workflow MEERPIPE {
                 file(cleaned_archive) // This is here passed as empty_clean.ar 
             ]
         }
+    }
 
+    if (params.use_prev_ar == false) {
         // Combine archives,flux calibrate Clean of RFI with MeerGaurd
         // obs_data is not defined if use_prev_ar is true so this will not run if use_prev_ar is true
         PSRADD_CALIBRATE_CLEAN( obs_data )
-        files_and_meta = PSRADD_CALIBRATE_CLEAN.out         // files_and_meta are defined earlier when use_prev_ar is true, and this will not apply because there is no PSRADD_CALIBRATE_CLEAN run in that case
+        files_and_meta = PSRADD_CALIBRATE_CLEAN.out        
             .map {
                 meta, ephemeris, template, raw_archive, cleaned_archive, snr, flux ->
                 [
@@ -225,6 +227,8 @@ workflow MEERPIPE {
             meta, ephemeris, template, raw_archive, cleaned_archive ->
             [ meta, template, cleaned_archive ]
         }
+
+    //Emma: do we need to decimate the raw archive? Could remove this step pretty easily
     without_templates = files_and_meta
         .filter { it[2].baseName == "no_template" }
         // Since there is no template to create a cleaned_archive, grab the raw_archive
