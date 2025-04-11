@@ -32,12 +32,23 @@ process GENERATE_IMAGE_RESULTS {
     # psrplot images
     raw_archive=${raw_archive}
     cleaned_archive=${cleaned_archive}
-    #Type_file_array definition: If refold_prev_ar is true, then only the cleaned_archive is used, then if refold_prev_ar is false but there is no template, only the raw archive is used. If both are false, then raw and cleaned archives are used.
-    type_file_array=(${ "params.refold_prev_ar" == "true" ? '"cleaned ${cleaned_archive}"' : (template.baseName == "no_template" ? '"raw ${raw_archive}"' : '"raw ${raw_archive}" "cleaned ${cleaned_archive}"') })
+
+    # Determine type_file_array based on conditions
+    type_file_array=()
+    if [ "${params.refold_prev_ar}" == "true" ]; then
+        type_file_array+=("cleaned ${cleaned_archive}")
+    elif [ "${template.baseName}" == "no_template" ]; then
+        type_file_array+=("raw ${raw_archive}")
+    else
+        type_file_array+=("raw ${raw_archive}" "cleaned ${cleaned_archive}")
+    fi
+
     for i in "\${type_file_array[@]}"; do
+        echo "Plotting: \$i" 
         set -- \$i
         type=\$1
         file=\$2
+        echo "Type: \$type, File: \$file"
         psrplot -p flux -jFTDp -jC                          -g 1024x768 -c above:l= -c above:c="Stokes I Profile (\${type})"     -D \${type}_profile_fts.png/png \$file
         psrplot -p Scyl -jFTD  -jC                          -g 1024x768 -c above:l= -c above:c="Polarisation Profile (\${type})" -D \${type}_profile_ftp.png/png \$file
         psrplot -p freq -jTDp  -jC                          -g 1024x768 -c above:l= -c above:c="Phase vs. Frequency (\${type})"  -D \${type}_phase_freq.png/png  \$file
@@ -86,8 +97,8 @@ process GENERATE_IMAGE_RESULTS {
         --snr ${meta.snr} \\
         --flux ${meta.flux} \\
         --dm_file ${dm_results} \\
-        ${ template.baseName == "no_template" ? "--raw_only" : "" }
-        ${ "params.refold_prev_ar" == "true" ? "--cleaned_only" : "" }
+        ${ template.baseName == "no_template" ? "--raw_only" : "" } \\
+        ${ params.refold_prev_ar ? "--cleaned_only" : "" }
     """
 
     stub:

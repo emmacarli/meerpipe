@@ -18,7 +18,7 @@ process PSRADD_CALIBRATE_CLEAN {
     tuple val(meta), path(cal_loc), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive) 
 
     output:
-    tuple val(meta), path(ephemeris), path(template), path("${meta.pulsar}_${meta.utc}_raw.ar", optional: true), path("${meta.pulsar}_${meta.utc}_zap.ar"), env(SNR), env(FLUX)
+    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path("${meta.pulsar}_${meta.utc}_zap.ar"), env(SNR), env(FLUX)
 
     when:
     task.ext.when == null || task.ext.when 
@@ -160,15 +160,29 @@ process PSRADD_CALIBRATE_CLEAN {
             FLUX=\$(pdv -f ${meta.pulsar}_${meta.utc}_zap.FTp | tail -n 1 | tr -s ' ' | cut -d ' ' -f 7)
         fi
     else
-        if [ ! -f ${meta.pulsar}_${meta.utc}_zap.ar ]; then #This happens if refold_prev_ar is false (as default) and raw_only is true, according to https://github.com/nf-core/meerpipe/blob/d9b5849c8b6e2d3451211f5915deae62340af33b/docs/output.md?plain=1#L29
+        if [ ! -f ${meta.pulsar}_${meta.utc}_zap.ar ]; then #This happens if refold_prev_ar is true and raw_only was true before, according to https://github.com/nf-core/meerpipe/blob/d9b5849c8b6e2d3451211f5915deae62340af33b/docs/output.md?plain=1#L29
            echo "There is no cleaned archive (according to current MeerPipe naming convention) to refold in the directory"
+           echo "Error: No cleaned archive found to refold. Stopping the pipeline." >&2
+           exit 1
         else
             echo "The raw archive will not be refolded as it is not stored"
             echo "Refold the previously cleaned and flux calibrated archive"
             pam -m -E ${ephemeris} ${cleaned_archive}
-            pam -FTp -e FTp ${cleaned_archive}
-            SNR=\$(psrstat -c snr=pdmp -c snr ${cleaned_archive}.FTp | cut -d '=' -f 2)
-            FLUX=\$(pdv -f ${cleaned_archive}.FTp | tail -n 1 | tr -s ' ' | cut -d ' ' -f 7)
+            #the below is just in case the original cleaned archive didn't have the same naming convention
+            #first test if the cleaned archive is the same as the one in the directory
+            #the tr command removes the backslashes in the name but gives out a warning which is ignored
+            normalised_cleaned_archive=\$(echo "${cleaned_archive}" | tr -d '\\' 2>/dev/null )
+            normalised_expected_archive=\$(echo "${meta.pulsar}_${meta.utc}_zap.ar" | tr -d '\\' 2>/dev/null)
+            #echo \$normalised_cleaned_archive
+            #echo \$normalised_expected_archive
+
+            if [ "\${normalised_cleaned_archive}" != "\${normalised_expected_archive}" ]; then
+                mv "${cleaned_archive}" "${meta.pulsar}_${meta.utc}_zap.ar"
+            fi
+
+            pam -FTp -e FTp ${meta.pulsar}_${meta.utc}_zap.ar
+            SNR=\$(psrstat -c snr=pdmp -c snr ${meta.pulsar}_${meta.utc}_zap.FTp | cut -d '=' -f 2)
+            FLUX=\$(pdv -f ${meta.pulsar}_${meta.utc}_zap.FTp | tail -n 1 | tr -s ' ' | cut -d ' ' -f 7)
 
         fi
     fi
