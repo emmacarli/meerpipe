@@ -12,17 +12,17 @@ process PSRADD_CALIBRATE_CLEAN {
     // conda "YOUR-TOOL-HERE"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/meerpipe:latest':
-        'nickswainston/meerpipe:3.0.6' }"
+        'nickswainston/meerpipe:latest' }"
 
     input:
     tuple val(meta), path(cal_loc), path(ephemeris), path(template), path(raw_archive), path(cleaned_archive) 
-
+    //raw archive input is not used here
+    //it's empty_raw.ar normally, except in the case where the pipeline was run without a template and thus created a raw archive only
     output:
-    tuple val(meta), path(ephemeris), path(template), path(raw_archive), path("${meta.pulsar}_${meta.utc}_zap.ar"), env(SNR), env(FLUX)
-
+    tuple val(meta), path(ephemeris), path(template), path("${meta.pulsar}_${meta.utc}_{raw,raw_empty}.ar"), path("${meta.pulsar}_${meta.utc}_zap.ar"), env(SNR), env(FLUX)
+    //IF refold_prev_ar is true a raw archive will not be recreated thus we will create an empty file
     when:
-    task.ext.when == null || task.ext.when 
-
+    task.ext.when == null || task.ext.when
 
     script:
     def args = task.ext.args ?: ''
@@ -31,7 +31,6 @@ process PSRADD_CALIBRATE_CLEAN {
     //               If the software is unable to output a version number on the command-line then it can be manually specified
     //               e.g. https://github.com/nf-core/modules/blob/master/modules/nf-core/homer/annotatepeaks/main.nf
     """
-    
     raw_only=${ template.baseName == "no_template" ? "true" : "false" }
 
     if [ "${params.refold_prev_ar}" == "false" ]; then
@@ -160,7 +159,8 @@ process PSRADD_CALIBRATE_CLEAN {
             FLUX=\$(pdv -f ${meta.pulsar}_${meta.utc}_zap.FTp | tail -n 1 | tr -s ' ' | cut -d ' ' -f 7)
         fi
     else
-        echo "The raw archive will not be refolded as it is not stored"
+        echo "The raw archive will not be refolded as it is not stored, creating a dummy raw file"
+        touch "${meta.pulsar}_${meta.utc}_raw_empty.ar"
         echo "Refold the previously cleaned and flux calibrated archive"
         pam -m -E ${ephemeris} ${cleaned_archive}
         #the below is just in case the original cleaned archive didn't have the same naming convention

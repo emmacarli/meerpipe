@@ -282,10 +282,10 @@ process OBS_LIST {
             #This will happen if the pipeline has been run with no template before and therefore there is only a raw archive available.
             obs_df['raw_archive'] = f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_raw.ar"
         
-        if "${params.refold_prev_ar}" == "true":
+        if "${params.refold_prev_ar}" == "true" or "${params.use_prev_ar}" == "true":
             print(f"Checking for existence of file ${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}/{obs['UTC Start']}_zap.ar")
             if glob.glob(f"${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar") == []:
-                raise FileNotFoundError(f"File ${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar not found, and cannot be refolded. Stopping the pipeline.")
+                raise FileNotFoundError(f"File ${params.outdir}/{obs['Pulsar Jname']}/{obs['UTC Start']}/{obs['Beam #']}/{obs['Pulsar Jname']}_{obs['UTC Start']}_zap.ar not found, and cannot be used or refolded. Stopping the pipeline.")
         
         if "${params.refold_prev_ar}" == "false" and "${params.use_prev_ar}" == "false":
             with open('empty_clean.ar', 'w'):

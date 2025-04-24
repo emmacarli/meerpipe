@@ -12,3 +12,6 @@ package-lock.json
 package.json
 
 emma_meerpipe_outputs/
+copied_output_data_for_tests/
+J1708-4843.std
+no_template.std
